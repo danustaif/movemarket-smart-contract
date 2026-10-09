@@ -30,8 +30,7 @@ import readline from "node:readline/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import {
-  artifact, assertChain, fail, monadTestnet, paths, privateKeyToAccount, publicClient, readJson, viem, writeJson,
-} from "./lib.mjs";
+  artifact, assertChain, fail, monadTestnet, paths, privateKeyToAccount, publicClient, readJson, viem, writeJson, readDeployment } from "./lib.mjs";
 
 const { values: o } = parseArgs({
   options: {
@@ -42,7 +41,7 @@ const { values: o } = parseArgs({
 if (!o.owner || !o.resolver) fail("wajib --owner dan --resolver (lihat komentar di atas script)");
 
 const sot = readJson(paths.constants);
-const d = readJson(o.deployment ?? paths.deployment);
+const d = readDeployment(o.deployment);
 const rpc = o.rpc ?? sot.network.rpcPublic;
 const pub = publicClient(rpc);
 await assertChain(pub, sot);

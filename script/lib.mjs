@@ -25,6 +25,12 @@ export const { privateKeyToAccount } = req("viem/accounts");
 export const { monadTestnet } = req("viem/chains");
 
 export const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
+
+/** deployments/monad-testnet.json dengan pesan jelas kalau belum ada deploy. */
+export function readDeployment(p = paths.deployment) {
+  if (!fs.existsSync(p)) fail(`${path.relative(process.cwd(), p)} belum ada. Deploy dulu (DEPLOY.md langkah c).`);
+  return readJson(p);
+}
 /** Format sama dengan file SOT dan config CRE (indentasi 2, newline akhir); urutan kunci dipertahankan. */
 export const writeJson = (p, v) => fs.writeFileSync(p, JSON.stringify(v, null, 2) + "\n");
 

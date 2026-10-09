@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { artifact, assertChain, fail, paths, publicClient, readJson, viem } from "./lib.mjs";
+import { artifact, assertChain, fail, paths, publicClient, readJson, viem, readDeployment } from "./lib.mjs";
 
 const API = "https://agents.devnads.com/v1/verify";
 const SOURCIFY = "https://sourcify-api-monad.blockvision.org/";
@@ -29,7 +29,7 @@ const { values: o } = parseArgs({
   },
 });
 const sot = readJson(paths.constants);
-const d = readJson(o.deployment ?? paths.deployment);
+const d = readDeployment(o.deployment);
 const pub = publicClient(o.rpc ?? sot.network.rpcPublic);
 await assertChain(pub, sot);
 

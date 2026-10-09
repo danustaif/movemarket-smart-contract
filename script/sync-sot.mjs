@@ -12,13 +12,13 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { assertChain, checksummed, fail, paths, publicClient, readJson, viem, writeJson } from "./lib.mjs";
+import { assertChain, checksummed, fail, paths, publicClient, readJson, viem, writeJson, readDeployment } from "./lib.mjs";
 
 const { values: o } = parseArgs({
   options: { "dry-run": { type: "boolean" }, rpc: { type: "string" }, deployment: { type: "string" } },
 });
 const sot = readJson(paths.constants);
-const d = readJson(o.deployment ?? paths.deployment);
+const d = readDeployment(o.deployment);
 
 // ------------------------------------------------------------------ validasi file
 if (d.chainId !== sot.network.chainId) fail(`chainId ${d.chainId}, harus ${sot.network.chainId}`);
