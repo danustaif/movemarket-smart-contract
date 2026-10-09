@@ -14,3 +14,7 @@ fs_permissions = [
 runs = 128
 depth = 128
 fail_on_revert = true # aksi handler tidak boleh revert; assert di handler ikut dihitung
+
+[lint]
+# lockTime dan resolveDeadline memang berbasis block.timestamp (CONTRACTS.md 3)
+exclude_lints = ["block-timestamp"]

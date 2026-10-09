@@ -217,6 +217,8 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
             m.status = Status.RESOLVED;
             m.outcome = Outcome(o);
             if (m.poolYes > 0 && m.poolNo > 0) {
+                // aman: fee <= 5% dari dua pool uint128, selalu muat di uint128
+                // forge-lint: disable-next-line(unsafe-typecast)
                 uint128 fee = uint128((uint256(m.poolYes) + m.poolNo) * feeBps / BPS);
                 m.fee = fee;
                 feesAccrued += fee;

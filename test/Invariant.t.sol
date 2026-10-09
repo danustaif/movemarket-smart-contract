@@ -115,6 +115,7 @@ contract Handler is Test {
         uint256[] memory one = new uint256[](1);
         one[0] = _id(idSeed);
         uint8[] memory outs = new uint8[](1);
+        // forge-lint: disable-next-line(unsafe-typecast)
         outs[0] = uint8(1 + outcomeSeed % 3); // YES, NO, VOID
         bytes32 key = gameKey;
         // sesekali report yang harus di-skip: outcome tidak sah atau partai lain
