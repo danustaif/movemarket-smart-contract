@@ -19,6 +19,8 @@ import "./interfaces/LiveMarketTypes.sol";
 contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
     using SafeERC20 for IERC20;
 
+    uint256 private constant BPS = 10_000;
+
     address public immutable token;
     address public forwarder;
     address public resolver;
@@ -146,9 +148,51 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
 
     // ------------------------------------------------------------------ CRE
 
-    function onReport(bytes calldata, bytes calldata report) external override {}
+    function onReport(bytes calldata, bytes calldata report) external override {
+        if (msg.sender != forwarder) revert UnauthorizedForwarder(msg.sender);
+        (bytes32 gameKey, uint256[] memory ids, uint8[] memory outcomes) =
+            abi.decode(report, (bytes32, uint256[], uint8[]));
+        uint256 n = ids.length;
+        if (n != outcomes.length || n > MAX_RESOLVE_BATCH) revert BadReport();
 
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {}
+        for (uint256 i; i < n; i++) {
+            uint256 id = ids[i];
+            uint8 o = outcomes[i];
+            Market storage m = _markets[id];
+            uint8 skip;
+            if (!_exists(id)) skip = SKIP_MARKET_NOT_FOUND;
+            else if (m.gameKey != gameKey) skip = SKIP_GAME_MISMATCH;
+            else if (m.status != Status.OPEN) skip = SKIP_NOT_OPEN;
+            else if (block.timestamp < m.lockTime) skip = SKIP_NOT_LOCKED;
+            else if (o < uint8(Outcome.YES) || o > uint8(Outcome.VOID)) skip = SKIP_BAD_OUTCOME;
+            if (skip != 0) {
+                emit ResolutionSkipped(id, skip);
+                continue;
+            }
+
+            if (o == uint8(Outcome.VOID)) {
+                _void(id, VOID_ORACLE);
+                continue;
+            }
+            uint128 winPool = o == uint8(Outcome.YES) ? m.poolYes : m.poolNo;
+            if (winPool == 0) {
+                _void(id, VOID_NO_WINNERS);
+                continue;
+            }
+            m.status = Status.RESOLVED;
+            m.outcome = Outcome(o);
+            if (m.poolYes > 0 && m.poolNo > 0) {
+                uint128 fee = uint128((uint256(m.poolYes) + m.poolNo) * feeBps / BPS);
+                m.fee = fee;
+                feesAccrued += fee;
+            }
+            emit MarketResolved(id, o);
+        }
+    }
+
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == type(IReceiver).interfaceId || interfaceId == type(IERC165).interfaceId;
+    }
 
     // ------------------------------------------------------------------ owner
 
@@ -163,7 +207,10 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
 
     function setResolver(address resolver_) external onlyOwner {}
 
-    function setFeeBps(uint16 feeBps_) external onlyOwner {}
+    function setFeeBps(uint16 feeBps_) external onlyOwner {
+        if (feeBps_ > MAX_FEE_BPS) revert FeeTooHigh();
+        feeBps = feeBps_;
+    }
 
     function setLimits(uint128 minBet_, uint128 maxStakePerUser_) external onlyOwner {}
 
