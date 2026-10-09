@@ -19,6 +19,17 @@ cast wallet new ~/.foundry/keystores faucet     # wallet faucet terpisah (D19)
 cast wallet address --account deployer          # tampilkan alamat (minta password)
 ```
 
+Sudah punya private key? Impor sebagai keystore, jangan taruh di `.env` atau chat (key diminta tersembunyi, lalu password):
+
+```bash
+cast wallet import deployer --interactive
+cast wallet import resolver --interactive
+cast wallet import faucet   --interactive
+cast wallet list            # cek nama keystore
+```
+
+`.env` di repo ini (salin dari `.env.example`) hanya berisi alamat publik: `RESOLVER_ADDRESS`, opsional `FORWARDER_ADDRESS`, dan `MONAD_TESTNET_RPC`.
+
 Pengguna uji untuk `measure-gas.mjs` default-nya `deployer`. Kalau ingin akun terpisah, buat keystore `user` juga.
 
 Wallet CLI CRE terpisah: CLI `cre` membaca `CRE_ETH_PRIVATE_KEY` dari `backend/cre/.env` (isi sendiri, jangan dibagikan ke agen). Resolver service membaca `RESOLVER_PRIVATE_KEY` dan `FAUCET_PRIVATE_KEY` dari `backend/resolver/.env`. Untuk mengisinya dari keystore, jalankan sendiri di terminal: `cast wallet decrypt-keystore <nama>` (mencetak private key, jangan di sesi agen atau rekaman layar).
