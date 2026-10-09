@@ -12,5 +12,5 @@ fs_permissions = [
 
 [invariant]
 runs = 128
-depth = 64
-fail_on_revert = false
+depth = 128
+fail_on_revert = true # aksi handler tidak boleh revert; assert di handler ikut dihitung
