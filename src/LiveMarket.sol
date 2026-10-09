@@ -140,9 +140,32 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
         emit BetPlaced(id, msg.sender, yes, amount, m.poolYes, m.poolNo);
     }
 
-    function claim(uint256 id) external nonReentrant returns (uint256 payout) {}
+    function claim(uint256 id) external nonReentrant returns (uint256 payout) {
+        Market storage m = _markets[id];
+        if (m.status != Status.RESOLVED) revert NotClaimable(id); // RESOLVED selalu YES atau NO
+        Position storage pos = _positions[id][msg.sender];
+        if (pos.settled) revert AlreadySettled(id);
+        if (_winStake(m, pos) == 0) revert NothingToClaim(id);
 
-    function claimMany(uint256[] calldata ids) external nonReentrant returns (uint256 totalPayout) {}
+        payout = _payout(m, pos);
+        pos.settled = true;
+        IERC20(token).safeTransfer(msg.sender, payout);
+        emit Claimed(id, msg.sender, payout);
+    }
+
+    function claimMany(uint256[] calldata ids) external nonReentrant returns (uint256 totalPayout) {
+        for (uint256 i; i < ids.length; i++) {
+            uint256 id = ids[i];
+            Market storage m = _markets[id];
+            Position storage pos = _positions[id][msg.sender];
+            if (m.status != Status.RESOLVED || pos.settled || _winStake(m, pos) == 0) continue;
+            uint256 payout = _payout(m, pos);
+            pos.settled = true;
+            totalPayout += payout;
+            emit Claimed(id, msg.sender, payout);
+        }
+        if (totalPayout > 0) IERC20(token).safeTransfer(msg.sender, totalPayout);
+    }
 
     function refund(uint256 id) external nonReentrant returns (uint256 amount) {}
 
@@ -236,7 +259,12 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
         return _positions[id][user];
     }
 
-    function claimable(uint256 id, address user) external view returns (uint256) {}
+    function claimable(uint256 id, address user) external view returns (uint256) {
+        Market storage m = _markets[id];
+        Position storage pos = _positions[id][user];
+        if (m.status != Status.RESOLVED || pos.settled) return 0;
+        return _payout(m, pos);
+    }
 
     function refundable(uint256 id, address user) external view returns (uint256) {}
 
@@ -244,6 +272,17 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
 
     function _exists(uint256 id) private view returns (bool) {
         return id != 0 && id < nextMarketId;
+    }
+
+    function _winStake(Market storage m, Position storage pos) private view returns (uint256) {
+        return m.outcome == Outcome.YES ? pos.yes : pos.no;
+    }
+
+    /// @dev payout = winStake * (total - fee) / winPool, dibulatkan ke bawah: jumlah semua payout <= total - fee.
+    ///      winPool > 0 dijamin onReport (pool pemenang kosong menjadi VOID_NO_WINNERS).
+    function _payout(Market storage m, Position storage pos) private view returns (uint256) {
+        uint256 winPool = m.outcome == Outcome.YES ? m.poolYes : m.poolNo;
+        return Math.mulDiv(_winStake(m, pos), uint256(m.poolYes) + m.poolNo - m.fee, winPool);
     }
 
     function _void(uint256 id, uint8 reason) private {
