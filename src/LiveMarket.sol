@@ -238,18 +238,32 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
         }
     }
 
-    function setForwarder(address forwarder_) external onlyOwner {}
+    function setForwarder(address forwarder_) external onlyOwner {
+        forwarder = forwarder_;
+        emit ForwarderUpdated(forwarder_);
+    }
 
-    function setResolver(address resolver_) external onlyOwner {}
+    function setResolver(address resolver_) external onlyOwner {
+        resolver = resolver_;
+        emit ResolverUpdated(resolver_);
+    }
 
     function setFeeBps(uint16 feeBps_) external onlyOwner {
         if (feeBps_ > MAX_FEE_BPS) revert FeeTooHigh();
         feeBps = feeBps_;
     }
 
-    function setLimits(uint128 minBet_, uint128 maxStakePerUser_) external onlyOwner {}
+    function setLimits(uint128 minBet_, uint128 maxStakePerUser_) external onlyOwner {
+        minBet = minBet_;
+        maxStakePerUser = maxStakePerUser_;
+    }
 
-    function withdrawFees(address to) external onlyOwner {}
+    function withdrawFees(address to) external onlyOwner {
+        uint256 amount = feesAccrued;
+        feesAccrued = 0;
+        IERC20(token).safeTransfer(to, amount);
+        emit FeesWithdrawn(to, amount);
+    }
 
     function pause() external onlyOwner {
         _pause();
@@ -265,7 +279,15 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
         return _markets[id];
     }
 
-    function getMarkets(uint256[] calldata ids) external view returns (MarketView[] memory) {}
+    function getMarkets(uint256[] calldata ids) external view returns (MarketView[] memory views) {
+        views = new MarketView[](ids.length);
+        for (uint256 i; i < ids.length; i++) {
+            Market storage m = _markets[ids[i]];
+            views[i] = MarketView(
+                ids[i], m.gameKey, uint8(m.marketType), uint8(m.side), m.fromPly, m.toPly, m.lockTime, uint8(m.status)
+            );
+        }
+    }
 
     function getPosition(uint256 id, address user) external view returns (Position memory) {
         return _positions[id][user];
