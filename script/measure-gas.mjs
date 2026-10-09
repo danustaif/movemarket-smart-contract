@@ -18,7 +18,7 @@
 //   setForwarder, dan mint/approve/createMarkets versi worst case, hanya diestimasi (tidak dikirim).
 //   Batch: base + perMarket dari estimasi n=1 dan n=K, K = resolver.REQUEST_MAX_BATCH.
 // Angka worst case (slot nol) paling akurat di deployment baru: jalankan sekali tepat setelah deploy.
-// claim/claimMany butuh pasar RESOLVED, yang hanya bisa lewat onReport dari forwarder. Di Monad forwarder
+// claim/claimMany (batch: claimManyBase + claimManyPerMarket dari n=1 dan n=2) butuh pasar RESOLVED, yang hanya bisa lewat onReport dari forwarder. Di Monad forwarder
 // adalah kontrak Chainlink, jadi keduanya diukur setelah report CRE pertama (perintah dicetak di akhir).
 // Pasar uji memakai partai fixture sot/fixtures/lichess/game-export.finished-mate.json (sudah selesai).
 // Tanpa --write hanya mencetak tabel; dengan --write mengisi ../source/sot/constants.json gas.limits lalu
@@ -177,7 +177,6 @@ const nextForwarder = currentForwarder === sot.addresses.creKeystoneForwarder
 note("setForwarder", await estimate(owner, lm, "setForwarder", [nextForwarder]));
 console.log(`  ${"owner".padEnd(9)} ${"setForwarder".padEnd(18)} estimate ${String(single.setForwarder).padStart(8)}  (tidak dikirim)`);
 
-let claimMany;
 if (fwd) {
   const report = viem.encodeAbiParameters(viem.parseAbiParameters("bytes32, uint256[], uint8[]"),
     [viem.keccak256(viem.toBytes(GAME_REF)), ids.slice(0, 3), Array(3).fill(sot.outcomeCode.YES)]);
@@ -190,7 +189,8 @@ if ((await balanceOf(user.address)) > 0n) console.log("  PERINGATAN: saldo tUSDC
 note("refund", await estimate(user, lm, "refund", [ids[K - 1]]));
 if (fwd) {
   note("claim", await estimate(user, lm, "claim", [ids[0]]));
-  claimMany = [await estimate(user, lm, "claimMany", [[ids[1]]]), await estimate(user, lm, "claimMany", [[ids[1], ids[2]]])];
+  // Batch seperti createMarkets: base + perMarket x n dari n=1 dan n=2.
+  batches.claimMany = [await estimate(user, lm, "claimMany", [[ids[1]]]), await estimate(user, lm, "claimMany", [[ids[1], ids[2]]]), 2];
 }
 await send(user, lm, "refund", [ids[K - 1]]);
 if (fwd) {
@@ -213,14 +213,8 @@ for (const name of Object.keys(sot.gas.limits)) {
   const v = limits[name];
   const now = sot.gas.limits[name];
   const why = name === "nativeTransfer" ? "tetap"
-    : name === "claimMany" && claimMany ? "limit datar, lihat info di bawah"
     : name.startsWith("claim") ? "belum diukur" : "tidak diukur";
   console.log(`  ${name.padEnd(28)} ${(v === undefined ? "-" : String(v)).padStart(9)}  ${now ?? "null"}${v === undefined ? `  (${why})` : ""}`);
-}
-if (claimMany) {
-  const [one, two] = claimMany;
-  console.log(`\nclaimMany (info, tidak ditulis: SOT memakai satu limit datar ${sot.gas.limits.claimMany}):` +
-    ` n=1 ${buffered(one)}, n=2 ${buffered(two)}, perMarket ${buffered(two - one)}.`);
 }
 if (!fwd) {
   console.log(`
@@ -228,7 +222,9 @@ claim dan claimMany belum diukur: pasar RESOLVED hanya lewat onReport dari forwa
 Ukur setelah report CRE pertama untuk requestResolution di atas (tx ${request.hash},
 pasar ${ids[0]}..${ids[K - 1]}; user stake di ${ids[0]} kedua sisi, ${ids[1]} dan ${ids[2]} YES), misalnya:
   cast estimate ${lm.address} "claim(uint256)" ${ids[0]} --from ${user.address} --rpc-url ${rpc}
-lalu tambah ${bufferPct}% dan tulis gas.limits.claim di sot/constants.json.`);
+  cast estimate ${lm.address} "claimMany(uint256[])" "[${ids[1]}]" --from ${user.address} --rpc-url ${rpc}
+  cast estimate ${lm.address} "claimMany(uint256[])" "[${ids[1]},${ids[2]}]" --from ${user.address} --rpc-url ${rpc}
+lalu tambah ${bufferPct}%: gas.limits.claim; claimManyPerMarket = n2 - n1, claimManyBase = n1 - perMarket.`);
 }
 console.log(`\nrequestResolution ${request.hash} (pasar ${ids[0]}..${ids[K - 1]}) bisa dipakai untuk simulasi CRE setelah bloknya finalized.`);
 console.log(`Biaya terpakai: ${mon(spent)}.`);
