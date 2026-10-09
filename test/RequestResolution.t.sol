@@ -57,6 +57,22 @@ contract RequestResolutionTest is Base {
         assertFalse(market.getMarket(ids[1]).resolutionRequested);
     }
 
+    function test_skipsMarketVoidedBeforeLockTime() public {
+        uint256[] memory ids = _createN(2);
+        vm.warp(block.timestamp + BET_WINDOW / 2);
+        uint256 voided = _create(); // lockTime lebih lambat dari ids
+        market.adminVoid(_ids(voided));
+        _warpToLock(ids[0]);
+        assertLt(block.timestamp, market.getMarket(voided).lockTime);
+
+        uint256[] memory batch = new uint256[](3);
+        (batch[0], batch[1], batch[2]) = (ids[0], voided, ids[1]);
+        vm.expectEmit(address(market));
+        emit ILiveMarket.ResolutionRequested(GAME_KEY, GAME, ids);
+        _request(GAME, batch);
+        assertFalse(market.getMarket(voided).resolutionRequested);
+    }
+
     function test_allNonOpenReverts() public {
         uint256[] memory ids = _createN(2);
         market.adminVoid(ids);

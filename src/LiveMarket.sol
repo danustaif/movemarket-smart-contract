@@ -106,9 +106,12 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
         for (uint256 i; i < n; i++) {
             uint256 id = ids[i];
             Market storage m = _markets[id];
-            // Pasar yang tidak ada punya gameKey 0, jadi ikut tertolak oleh cek gameKey.
-            if (m.gameKey != gameKey || block.timestamp < m.lockTime) revert InvalidMarket(id);
+            // Urutan CONTRACTS.md 3.1: pasar yang tidak ada punya gameKey 0, jadi ikut tertolak di sini;
+            // non-OPEN dilewati sebelum cek lockTime supaya pasar yang di-void sebelum lockTime tidak
+            // menggagalkan batch.
+            if (m.gameKey != gameKey) revert InvalidMarket(id);
             if (m.status != Status.OPEN) continue;
+            if (block.timestamp < m.lockTime) revert InvalidMarket(id);
             m.resolutionRequested = true;
             open[k++] = id;
         }
