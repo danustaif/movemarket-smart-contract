@@ -6,13 +6,14 @@
 // Membaca deployments/monad-testnet.json, memvalidasi (chain SOT, alamat checksum, forwarder SOT, dan
 // state on-chain di --rpc, default RPC publik SOT), lalu menulis:
 //   ../source/sot/constants.json          addresses.liveMarket, mockUsdc, resolver, deployBlock
-//   ../backend/cre/resolver-workflow/config.{staging,production,local-simulation}.json  liveMarketAddress
+//   ../backend/cre/<cre.workflowName>/<config tiap cre.targets>  liveMarketAddress
 // dan menjalankan `node sot/check.mjs` di ../source. --dry-run hanya mencetak perubahan.
 // Tidak menyentuh .env mana pun; nilai env yang harus diisi user dicetak di akhir (alamat publik).
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { assertChain, checksummed, fail, paths, publicClient, readJson, viem, writeJson, readDeployment } from "./lib.mjs";
+import {
+  artifact, assertChain, checksummed, fail, paths, publicClient, readJson, runSotCheck, writeJson, readDeployment,
+} from "./lib.mjs";
 
 const { values: o } = parseArgs({
   options: { "dry-run": { type: "boolean" }, rpc: { type: "string" }, deployment: { type: "string" } },
@@ -32,10 +33,7 @@ if (!Number.isSafeInteger(d.deployBlock) || d.deployBlock < 0) fail(`deployBlock
 const rpc = o.rpc ?? sot.network.rpcPublic;
 const pub = publicClient(rpc);
 await assertChain(pub, sot);
-const lmAbi = viem.parseAbi([
-  "function token() view returns (address)", "function forwarder() view returns (address)",
-  "function resolver() view returns (address)", "function owner() view returns (address)",
-]);
+const lmAbi = artifact("LiveMarket").abi;
 const read = (functionName) => pub.readContract({ address: d.liveMarket, abi: lmAbi, functionName });
 for (const k of ["liveMarket", "mockUsdc"]) {
   if (!(await pub.getCode({ address: d[k] }))) fail(`tidak ada kode di ${k} ${d[k]} pada ${rpc}`);
@@ -46,7 +44,7 @@ for (const [fn, want] of Object.entries(onchain)) {
   if (got !== want) fail(`LiveMarket.${fn}() = ${got}, file deployment ${want}`);
 }
 const minter = await pub.readContract({
-  address: d.mockUsdc, abi: viem.parseAbi(["function minters(address) view returns (bool)"]),
+  address: d.mockUsdc, abi: artifact("MockUSDC").abi,
   functionName: "minters", args: [d.resolver],
 });
 if (!minter) fail(`resolver ${d.resolver} belum minter di MockUSDC`);
@@ -76,9 +74,7 @@ for (const [file, json, apply] of edits) {
 if (o["dry-run"]) {
   console.log(`\n--dry-run: ${changed} file akan berubah, tidak ada yang ditulis.`);
 } else if (changed) {
-  console.log("\nnode sot/check.mjs");
-  const r = spawnSync("node", ["sot/check.mjs"], { cwd: paths.source, stdio: "inherit" });
-  if (r.status !== 0) fail("sot/check.mjs gagal; perbaiki sebelum commit");
+  runSotCheck();
 }
 
 console.log(`

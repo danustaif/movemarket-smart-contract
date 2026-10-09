@@ -64,7 +64,7 @@ forge script script/Deploy.s.sol --rpc-url https://testnet-rpc.monad.xyz --accou
 forge script script/Deploy.s.sol --rpc-url https://testnet-rpc.monad.xyz --account deployer --broadcast --slow
 ```
 
-`FORWARDER_ADDRESS` dibiarkan kosong: default MockKeystoneForwarder SOT `0xB9F79d863261869B234c481D1f9A7af84AeAd192`. `--slow` menunggu receipt tiap transaksi, cocok dengan batas 1 transaksi per 3 blok untuk akun di bawah 10 MON.
+`FORWARDER_ADDRESS` dibiarkan kosong: default MockKeystoneForwarder SOT (`addresses.creMockKeystoneForwarder` di `../source/sot/constants.json`). `--slow` menunggu receipt tiap transaksi, cocok dengan batas 1 transaksi per 3 blok untuk akun di bawah 10 MON.
 
 Hasil: `deployments/monad-testnet.json` (commit file ini) dan `broadcast/Deploy.s.sol/10143/run-latest.json` (dipakai `verify.mjs`, tidak di-commit). Deploy ulang menimpa keduanya.
 
@@ -77,7 +77,7 @@ node script/sync-sot.mjs --dry-run   # cetak perubahan
 node script/sync-sot.mjs
 ```
 
-Script memvalidasi file deployment (chain 10143, alamat checksum, forwarder sama dengan forwarder SOT) dan state on-chain (`token`, `forwarder`, `resolver`, `owner`, minter tUSDC), lalu menulis `addresses.liveMarket`, `mockUsdc`, `resolver`, `deployBlock` di `../source/sot/constants.json` dan `liveMarketAddress` di ketiga `../backend/cre/resolver-workflow/config.*.json`, kemudian menjalankan `node sot/check.mjs`. Di akhir ia mencetak nilai env untuk langkah g.
+Script memvalidasi file deployment (chain 10143, alamat checksum, forwarder sama dengan forwarder SOT) dan state on-chain (`token`, `forwarder`, `resolver`, `owner`, minter tUSDC), lalu menulis `addresses.liveMarket`, `mockUsdc`, `resolver`, `deployBlock` di `../source/sot/constants.json` dan `liveMarketAddress` di config tiap target `cre.targets` SOT (`../backend/cre/<cre.workflowName>/config.*.json`), kemudian menjalankan `node sot/check.mjs`. Di akhir ia mencetak nilai env untuk langkah g.
 
 Commit di masing-masing repo: `source` dengan awalan `sot:`, `backend` untuk config CRE. Lalu `cd ../backend/cre/resolver-workflow && bun test` (test config menagih alamat yang sama dengan SOT).
 
@@ -91,7 +91,7 @@ node script/verify.mjs --sourcify    # paksa jalur cadangan
 
 Pra-cek: input transaksi deploy on-chain harus sama dengan bytecode `out/` + constructor args. Kalau gagal, `forge build` dari commit yang di-deploy dulu.
 
-Jalur utama `POST https://agents.devnads.com/v1/verify` (MonadVision, Socialscan, Monadscan sekaligus), bentuk body dari monskills v0.7.2 `skills/scaffold/SKILL.md`. Respons API dicetak apa adanya. Kalau API gagal, script otomatis menjalankan `forge verify-contract ... --verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/`. Cek tab Contract di explorer. Indexer Envio butuh kontrak terverifikasi.
+Jalur utama `POST` ke `verification.apiUrl` SOT (MonadVision, Socialscan, Monadscan sekaligus), bentuk body dari monskills v0.7.2 `skills/scaffold/SKILL.md`. Respons API dicetak apa adanya. Kalau API gagal, script otomatis menjalankan `forge verify-contract ... --verifier sourcify --verifier-url <verification.sourcifyUrl SOT>`. Cek tab Contract di explorer. Indexer Envio butuh kontrak terverifikasi.
 
 ## f. Ukur gas limit (D22)
 

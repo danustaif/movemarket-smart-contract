@@ -3,12 +3,12 @@
 //
 //   node script/verify.mjs [--dry-run] [--sourcify] [--rpc <url>] [--deployment <file>]
 //
-// Jalur utama: POST https://agents.devnads.com/v1/verify (MonadVision, Socialscan, Monadscan sekaligus).
+// Jalur utama: POST SOT verification.apiUrl (MonadVision, Socialscan, Monadscan sekaligus).
 // Bentuk body dari monskills v0.7.2 skills/scaffold/SKILL.md bagian "Verification (All Explorers)":
 // chainId, contractAddress, contractName (path:Name), compilerVersion (v...), standardJsonInput (dari
 // `forge verify-contract --show-standard-json-input`), foundryMetadata (`.metadata` artefak out/), dan
 // constructorArgs (ABI-encoded tanpa 0x, hanya kalau ada). Format respons API belum pernah diamati:
-// dicetak apa adanya. Kalau API gagal (atau --sourcify), jalur cadangan forge + Sourcify BlockVision.
+// dicetak apa adanya. Kalau API gagal (atau --sourcify), jalur cadangan forge + verification.sourcifyUrl.
 //
 // Pra-cek: creation code on-chain (input tx deploy dari broadcast/Deploy.s.sol/<chain>/run-latest.json)
 // harus sama dengan bytecode out/ + constructorArgs. Kalau beda, build lokal bukan yang di-deploy dan
@@ -19,9 +19,6 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { artifact, assertChain, fail, paths, publicClient, readJson, viem, readDeployment } from "./lib.mjs";
 
-const API = "https://agents.devnads.com/v1/verify";
-const SOURCIFY = "https://sourcify-api-monad.blockvision.org/";
-
 const { values: o } = parseArgs({
   options: {
     "dry-run": { type: "boolean" }, sourcify: { type: "boolean" },
@@ -29,6 +26,7 @@ const { values: o } = parseArgs({
   },
 });
 const sot = readJson(paths.constants);
+const { apiUrl: API, sourcifyUrl: SOURCIFY } = sot.verification;
 const d = readDeployment(o.deployment);
 const pub = publicClient(o.rpc ?? sot.network.rpcPublic);
 await assertChain(pub, sot);

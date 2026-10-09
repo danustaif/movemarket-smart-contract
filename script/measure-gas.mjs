@@ -30,7 +30,8 @@ import readline from "node:readline/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import {
-  artifact, assertChain, fail, monadTestnet, paths, privateKeyToAccount, publicClient, readJson, viem, writeJson, readDeployment } from "./lib.mjs";
+  artifact, assertChain, fail, monadTestnet, paths, privateKeyToAccount, publicClient, readJson, runSotCheck, viem, writeJson,
+  readDeployment } from "./lib.mjs";
 
 const { values: o } = parseArgs({
   options: {
@@ -64,8 +65,13 @@ if (fwd && currentForwarder !== fwd.address) fail(`forwarder kontrak ${currentFo
 
 const K = sot.resolver.REQUEST_MAX_BATCH;
 const fixture = readJson(path.join(paths.source, "sot/fixtures/lichess/game-export.finished-mate.json"));
-const GAME_REF = `lichess:game:${fixture.id}`;
-if (20 + 4 * K > fixture.moves.split(" ").length) fail("fixture terlalu pendek untuk K pasar");
+const gameRefOf = (gameId) => sot.gameRef.formats.find((f) => f.kind === "game").pattern.replace("{gameId}", gameId);
+const GAME_REF = gameRefOf(fixture.id);
+// Rentang ply seperti planner di replay: mulai setelah REPLAY_START_PLY, satu pasar per SPAWN_EVERY_PLIES.
+const { REPLAY_START_PLY } = sot.resolver;
+const { SPAWN_EVERY_PLIES, WINDOW_PLIES } = sot.planner;
+if (REPLAY_START_PLY + SPAWN_EVERY_PLIES * K > fixture.moves.split(" ").length) fail("fixture terlalu pendek untuk K pasar");
+const enumIndex = (name, value) => sot.enums[name].indexOf(value);
 
 // ------------------------------------------------------------------ perkiraan biaya
 // Batas atas kasar gas limit per langkah: hasil anvil ditambah biaya akses dingin Monad (+6.000 per slot).
@@ -127,7 +133,7 @@ const balanceOf = (a) => read(usdc, "balanceOf", [a]);
 // atau gameRef acak yang belum pernah dipakai (hanya estimasi, tidak dikirim), supaya hasil sama walau
 // script dijalankan ulang. Saldo tUSDC user dibuat habis oleh bet terakhir agar refund/claim juga worst case.
 const fresh = () => viem.getAddress(viem.toHex(randomBytes(20)));
-const freshRef = `lichess:game:${randomBytes(6).toString("base64url")}`; // panjang sama dengan GAME_REF
+const freshRef = gameRefOf(randomBytes(6).toString("base64url")); // panjang sama dengan GAME_REF
 
 console.log("Skenario (MENGIRIM TRANSAKSI):");
 const minBet = await read(lm, "minBet");
@@ -142,7 +148,8 @@ const first = await read(lm, "nextMarketId");
 const ids = Array.from({ length: K }, (_, i) => first + BigInt(i));
 const lockTime = (await pub.getBlock()).timestamp + BigInt(sot.contract.MAX_BET_WINDOW_SEC) - 60n;
 const params = (n, gameRef) => Array.from({ length: n }, (_, i) => ({
-  gameRef, marketType: i % 2, side: 0, fromPly: 21 + 4 * i, toPly: 24 + 4 * i,
+  gameRef, marketType: enumIndex("MarketType", i % 2 ? "CAPTURE" : "CHECK"), side: enumIndex("Side", "ANY"),
+  fromPly: REPLAY_START_PLY + 1 + SPAWN_EVERY_PLIES * i, toPly: REPLAY_START_PLY + SPAWN_EVERY_PLIES * i + WINDOW_PLIES,
   lockTime, resolveDeadline: lockTime + BigInt(sot.planner.RESOLVE_DEADLINE_SEC),
 }));
 batches.createMarkets = [
@@ -178,7 +185,7 @@ note("setForwarder", await estimate(owner, lm, "setForwarder", [nextForwarder]))
 console.log(`  ${"owner".padEnd(9)} ${"setForwarder".padEnd(18)} estimate ${String(single.setForwarder).padStart(8)}  (tidak dikirim)`);
 
 if (fwd) {
-  const report = viem.encodeAbiParameters(viem.parseAbiParameters("bytes32, uint256[], uint8[]"),
+  const report = viem.encodeAbiParameters(viem.parseAbiParameters(sot.cre.reportAbi),
     [viem.keccak256(viem.toBytes(GAME_REF)), ids.slice(0, 3), Array(3).fill(sot.outcomeCode.YES)]);
   const onReport = await send(fwd, lm, "onReport", ["0x", report]);
   console.log(`  (onReport 3 pasar langsung dari forwarder: estimate ${onReport.est}; info untuk cre.gasLimit, bukan gas.limits)`);
@@ -236,9 +243,8 @@ if (o.write) {
     j.gas.limits[name] = Number(v);
   }
   writeJson(paths.constants, j);
-  console.log(`\nDitulis ke ${path.relative(paths.root, paths.constants)}. node sot/check.mjs`);
-  const r = spawnSync("node", ["sot/check.mjs"], { cwd: paths.source, stdio: "inherit" });
-  if (r.status !== 0) fail("sot/check.mjs gagal");
+  console.log(`\nDitulis ke ${path.relative(paths.root, paths.constants)}.`);
+  runSotCheck();
 } else {
   console.log("\nTanpa --write: SOT tidak diubah.");
 }
