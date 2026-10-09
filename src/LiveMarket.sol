@@ -95,7 +95,27 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
         }
     }
 
-    function requestResolution(string calldata gameRef, uint256[] calldata ids) external onlyResolver {}
+    function requestResolution(string calldata gameRef, uint256[] calldata ids) external onlyResolver {
+        uint256 n = ids.length;
+        if (n == 0 || n > MAX_RESOLVE_BATCH) revert BadBatch();
+        bytes32 gameKey = keccak256(bytes(gameRef));
+        uint256[] memory open = new uint256[](n);
+        uint256 k;
+        for (uint256 i; i < n; i++) {
+            uint256 id = ids[i];
+            Market storage m = _markets[id];
+            // Pasar yang tidak ada punya gameKey 0, jadi ikut tertolak oleh cek gameKey.
+            if (m.gameKey != gameKey || block.timestamp < m.lockTime) revert InvalidMarket(id);
+            if (m.status != Status.OPEN) continue;
+            m.resolutionRequested = true;
+            open[k++] = id;
+        }
+        if (k == 0) revert BadBatch();
+        assembly ("memory-safe") {
+            mstore(open, k) // potong ke jumlah pasar yang tersisa
+        }
+        emit ResolutionRequested(gameKey, gameRef, open);
+    }
 
     // ------------------------------------------------------------------ pengguna
 
