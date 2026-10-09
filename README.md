@@ -18,6 +18,9 @@ Kontrak, test, dan script deploy selesai. Belum di-deploy ke Monad Testnet.
 | `src/interfaces/IReceiver.sol`, `IERC165.sol` | Disalin dari dokumentasi CRE, jangan diubah |
 | `script/Deploy.s.sol` | Deploy MockUSDC + LiveMarket, set resolver sebagai minter, tulis `deployments/monad-testnet.json` |
 | `script/check-abi.mjs` | Selector dan topic0 `ILiveMarket` dan `LiveMarket` harus sama dengan `sot/abi.json` |
+| `script/sync-sot.mjs` | Pasca-deploy: validasi `deployments/monad-testnet.json`, tulis alamat ke `sot/constants.json` dan config CRE (padanan `sync:contracts`) |
+| `script/verify.mjs` | Verifikasi MockUSDC dan LiveMarket (API `agents.devnads.com`, cadangan Sourcify) |
+| `script/measure-gas.mjs` | Ukur `gas.limits` SOT dengan `eth_estimateGas` + 10% lewat skenario transaksi nyata |
 | `test/` | Test per fungsi sesuai `CONTRACTS.md` bagian 7, invariant, dan test script deploy. `test/mocks/MockForwarder.sol` meneruskan `onReport` |
 
 Dependensi (submodule di `lib/`): OpenZeppelin Contracts v5.7.0, forge-std v1.17.0. Setelah clone: `git submodule update --init --recursive`.
@@ -50,7 +53,17 @@ RESOLVER_ADDRESS=0x... forge script script/Deploy.s.sol
 
 # Monad Testnet
 RESOLVER_ADDRESS=0x... forge script script/Deploy.s.sol \
-  --rpc-url $MONAD_TESTNET_RPC --account <keystore> --broadcast
+  --rpc-url $MONAD_TESTNET_RPC --account <keystore> --broadcast --slow
 ```
 
-Script menolak chain selain `network.chainId` SOT (10143) dan anvil (31337). `deployments/monad-testnet.json` hanya ditulis saat `--broadcast` di 10143; `deployBlock` di file itu adalah blok sebelum deploy (batas bawah, aman sebagai start block indexer). Langkah berikutnya (`sync:contracts`, verifikasi, ukur gas dengan `eth_estimateGas`) ada di `CONTRACTS.md` bagian 9 dan SOT bagian 13.
+Script menolak chain selain `network.chainId` SOT (10143) dan anvil (31337). `deployments/monad-testnet.json` hanya ditulis saat `--broadcast` di 10143; `deployBlock` di file itu adalah blok sebelum deploy (batas bawah, aman sebagai start block indexer).
+
+Urutan lengkap (wallet, dana MON, deploy, sinkron SOT, verifikasi, ukur gas, env, simulasi CRE, indexer) ada di [DEPLOY.md](DEPLOY.md). Ringkas:
+
+```bash
+node script/sync-sot.mjs                 # alamat -> ../source/sot/constants.json + config CRE, lalu sot/check.mjs
+node script/verify.mjs                   # verifikasi explorer (--dry-run untuk melihat request)
+node script/measure-gas.mjs --owner deployer --resolver resolver --write   # MENGIRIM TRANSAKSI
+```
+
+Ketiga script Node ESM tanpa `package.json` sendiri: viem diambil dari `../source/shared/node_modules` (`bun install` di sana). Semua punya `--rpc` untuk uji di `anvil --chain-id 10143`.
