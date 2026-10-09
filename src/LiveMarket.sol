@@ -88,7 +88,24 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
 
     // ------------------------------------------------------------------ pengguna
 
-    function bet(uint256 id, bool yes, uint128 amount) external nonReentrant whenNotPaused {}
+    function bet(uint256 id, bool yes, uint128 amount) external nonReentrant whenNotPaused {
+        Market storage m = _markets[id];
+        if (!_exists(id) || m.status != Status.OPEN) revert MarketNotOpen(id);
+        if (block.timestamp >= m.lockTime) revert BettingClosed(id);
+        if (amount < minBet) revert AmountTooSmall();
+        Position storage pos = _positions[id][msg.sender];
+        if (uint256(pos.yes) + pos.no + amount > maxStakePerUser) revert StakeCapExceeded();
+
+        if (yes) {
+            m.poolYes += amount;
+            pos.yes += amount;
+        } else {
+            m.poolNo += amount;
+            pos.no += amount;
+        }
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        emit BetPlaced(id, msg.sender, yes, amount, m.poolYes, m.poolNo);
+    }
 
     function claim(uint256 id) external nonReentrant returns (uint256 payout) {}
 
@@ -139,4 +156,10 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
     function claimable(uint256 id, address user) external view returns (uint256) {}
 
     function refundable(uint256 id, address user) external view returns (uint256) {}
+
+    // ------------------------------------------------------------------ internal
+
+    function _exists(uint256 id) private view returns (bool) {
+        return id != 0 && id < nextMarketId;
+    }
 }
