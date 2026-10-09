@@ -17,10 +17,10 @@ contract AdminTest is Base {
         assertEq(market.resolver(), resolver);
         assertEq(market.nextMarketId(), 1);
         assertEq(market.feesAccrued(), 0);
-        // sot/constants.json contract.defaults
-        assertEq(market.feeBps(), 200);
-        assertEq(market.minBet(), 1_000_000);
-        assertEq(market.maxStakePerUser(), 100_000_000);
+        string memory sot = vm.readFile("../source/sot/constants.json");
+        assertEq(market.feeBps(), vm.parseJsonUint(sot, ".contract.defaults.feeBps"));
+        assertEq(market.minBet(), vm.parseJsonUint(sot, ".contract.defaults.minBet"));
+        assertEq(market.maxStakePerUser(), vm.parseJsonUint(sot, ".contract.defaults.maxStakePerUser"));
     }
 
     function test_ownerCannotSetOutcome() public {
