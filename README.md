@@ -1,12 +1,21 @@
 # movemarket-smart-contract
 
+Project overview, architecture, and CRE evidence: [movemarket-source README](https://github.com/danustaif/movemarket-source#readme).
+
 Kontrak `LiveMarket` (pasar parimutuel + consumer report Chainlink CRE) dan `MockUSDC` (tUSDC) untuk Monad Testnet.
 
 Spesifikasi: `../source/docs/CONTRACTS.md`. Nilai kanonik: `../source/sot/`. Clone repo `movemarket-source` di sebelah repo ini.
 
 ## Status
 
-Kontrak, test, dan script deploy selesai. Belum di-deploy ke Monad Testnet.
+Kontrak, test, dan script deploy selesai. Ter-deploy di Monad Testnet dan terverifikasi (perfect match) di MonadVision dan Monadscan:
+
+| Kontrak | Alamat |
+|---|---|
+| LiveMarket | [`0xA40F0D8f2e70bfd8F52B4d08089bD083cBdDB9a9`](https://testnet.monadscan.com/address/0xA40F0D8f2e70bfd8F52B4d08089bD083cBdDB9a9) |
+| MockUSDC | [`0x3670C61f0179dAEF70574C5f6cdC20b7d9986561`](https://testnet.monadscan.com/address/0x3670C61f0179dAEF70574C5f6cdC20b7d9986561) |
+
+Alamat kanonik dan blok deploy ada di `source/sot/constants.json`; file deploy di `deployments/monad-testnet.json`.
 
 | File | Isi |
 |---|---|
