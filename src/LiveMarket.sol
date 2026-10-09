@@ -167,7 +167,19 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
         if (totalPayout > 0) IERC20(token).safeTransfer(msg.sender, totalPayout);
     }
 
-    function refund(uint256 id) external nonReentrant returns (uint256 amount) {}
+    function refund(uint256 id) external nonReentrant returns (uint256 amount) {
+        Market storage m = _markets[id];
+        if (_isExpired(id, m)) _void(id, VOID_EXPIRED);
+        if (m.status != Status.VOIDED) revert NotRefundable(id);
+        Position storage pos = _positions[id][msg.sender];
+        if (pos.settled) revert AlreadySettled(id);
+        amount = uint256(pos.yes) + pos.no;
+        if (amount == 0) revert NotRefundable(id);
+
+        pos.settled = true;
+        IERC20(token).safeTransfer(msg.sender, amount);
+        emit Refunded(id, msg.sender, amount);
+    }
 
     // ------------------------------------------------------------------ CRE
 
@@ -266,12 +278,22 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
         return _payout(m, pos);
     }
 
-    function refundable(uint256 id, address user) external view returns (uint256) {}
+    function refundable(uint256 id, address user) external view returns (uint256) {
+        Market storage m = _markets[id];
+        Position storage pos = _positions[id][user];
+        if ((m.status != Status.VOIDED && !_isExpired(id, m)) || pos.settled) return 0;
+        return uint256(pos.yes) + pos.no;
+    }
 
     // ------------------------------------------------------------------ internal
 
     function _exists(uint256 id) private view returns (bool) {
         return id != 0 && id < nextMarketId;
+    }
+
+    /// @dev OPEN dan sudah lewat resolveDeadline: refund pertama mengubahnya menjadi VOIDED (VOID_EXPIRED).
+    function _isExpired(uint256 id, Market storage m) private view returns (bool) {
+        return _exists(id) && m.status == Status.OPEN && block.timestamp > m.resolveDeadline;
     }
 
     function _winStake(Market storage m, Position storage pos) private view returns (uint256) {
