@@ -6,10 +6,13 @@
 // - ILiveMarket harus identik dengan SOT.
 // - LiveMarket harus memuat semua item SOT dengan selector sama. Item tambahan hanya boleh dari
 //   OpenZeppelin (Ownable, Pausable, ReentrancyGuard, SafeERC20) yang terdaftar di OZ_EXTRA.
+// - MockUSDC harus memuat semua fungsi dan error di sot mockUsdc (selector dihitung dari ABI
+//   human-readable). Tambahan hanya boleh dari ERC20 dan Ownable OpenZeppelin (OZ_ERC20_EXTRA).
 import { execFileSync } from "node:child_process";
-import fs from "node:fs";
+import { paths, readJson, viem } from "./lib.mjs";
 
-const sot = JSON.parse(fs.readFileSync(new URL("../../source/sot/abi.json", import.meta.url), "utf8")).computed;
+const abiJson = readJson(`${paths.source}/sot/abi.json`);
+const sot = abiJson.computed;
 
 const OZ_EXTRA = {
   functions: ["owner()", "paused()", "renounceOwnership()", "transferOwnership(address)"],
@@ -24,16 +27,51 @@ const OZ_EXTRA = {
   ],
 };
 
+const OWNABLE = {
+  functions: ["owner()", "renounceOwnership()", "transferOwnership(address)"],
+  events: ["OwnershipTransferred(address,address)"],
+  errors: ["OwnableInvalidOwner(address)", "OwnableUnauthorizedAccount(address)"],
+};
+const OZ_ERC20_EXTRA = {
+  functions: [
+    ...OWNABLE.functions,
+    "name()", "symbol()", "totalSupply()", "balanceOf(address)", "transfer(address,uint256)",
+    "allowance(address,address)", "approve(address,uint256)", "transferFrom(address,address,uint256)",
+  ],
+  events: [...OWNABLE.events, "Transfer(address,address,uint256)", "Approval(address,address,uint256)"],
+  errors: [
+    ...OWNABLE.errors,
+    "ERC20InsufficientAllowance(address,uint256,uint256)", "ERC20InsufficientBalance(address,uint256,uint256)",
+    "ERC20InvalidApprover(address)", "ERC20InvalidReceiver(address)", "ERC20InvalidSender(address)",
+    "ERC20InvalidSpender(address)",
+  ],
+};
+
+/** Selector item sot mockUsdc, format sama dengan bagian computed. */
+function mockUsdcSot() {
+  const want = { functions: {}, events: {}, errors: {} };
+  const m = abiJson.mockUsdc;
+  for (const item of viem.parseAbi([...m.functions, ...(m.errors ?? [])])) {
+    if (item.type === "function") want.functions[viem.toFunctionSignature(item)] = viem.toFunctionSelector(item);
+    if (item.type === "error") {
+      const sig = `${item.name}(${item.inputs.map((i) => i.type).join(",")})`;
+      want.errors[sig] = viem.toFunctionSelector(sig);
+    }
+  }
+  return want;
+}
+
 const inspect = (contract, what) =>
   JSON.parse(execFileSync("forge", ["inspect", contract, what, "--json"], { encoding: "utf8" }));
 // forge mengembalikan { "sig": "selector" } tanpa 0x untuk fungsi/error, dengan 0x untuk event.
 const norm = (obj) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v.startsWith("0x") ? v : `0x${v}`]));
 
 const fails = [];
-for (const [contract, extra] of [["ILiveMarket", null], ["LiveMarket", OZ_EXTRA]]) {
+const targets = [["ILiveMarket", sot, null], ["LiveMarket", sot, OZ_EXTRA], ["MockUSDC", mockUsdcSot(), OZ_ERC20_EXTRA]];
+for (const [contract, sotItems, extra] of targets) {
   for (const [kind, what] of [["functions", "methodIdentifiers"], ["events", "events"], ["errors", "errors"]]) {
     const got = norm(inspect(contract, what));
-    const want = sot[kind];
+    const want = sotItems[kind];
     for (const k of Object.keys(want))
       if (got[k] !== want[k]) fails.push(`${contract} ${kind} ${k}: compile=${got[k]} sot=${want[k]}`);
     for (const k of Object.keys(got))
@@ -44,5 +82,8 @@ if (fails.length) {
   for (const f of fails) console.log(`GAGAL  ${f}`);
   process.exit(1);
 }
-const n = Object.values(sot).reduce((n, o) => n + Object.keys(o).length, 0);
-console.log(`ILiveMarket dan LiveMarket cocok dengan sot/abi.json (${n} item; tambahan LiveMarket hanya dari allowlist OpenZeppelin)`);
+const count = (o) => Object.values(o).reduce((n, x) => n + Object.keys(x).length, 0);
+console.log(
+  `ILiveMarket, LiveMarket (${count(sot)} item), dan MockUSDC (${count(targets[2][1])} item) cocok dengan sot/abi.json; ` +
+    "tambahan hanya dari allowlist OpenZeppelin",
+);
