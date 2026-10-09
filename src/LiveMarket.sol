@@ -82,7 +82,18 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
         nextMarketId = firstId + n;
     }
 
-    function lockMarkets(uint256[] calldata ids) external onlyResolver {}
+    function lockMarkets(uint256[] calldata ids) external onlyResolver {
+        uint256 n = ids.length;
+        if (n == 0 || n > MAX_LOCK_BATCH) revert BadBatch();
+        for (uint256 i; i < n; i++) {
+            Market storage m = _markets[ids[i]];
+            // Pasar yang tidak ada punya lockTime 0, jadi ikut terlewati oleh cek waktu.
+            if (m.status == Status.OPEN && block.timestamp < m.lockTime) {
+                m.lockTime = uint64(block.timestamp);
+                emit MarketLocked(ids[i], m.lockTime);
+            }
+        }
+    }
 
     function requestResolution(string calldata gameRef, uint256[] calldata ids) external onlyResolver {}
 
@@ -121,7 +132,12 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
 
     // ------------------------------------------------------------------ owner
 
-    function adminVoid(uint256[] calldata ids) external onlyOwner {}
+    function adminVoid(uint256[] calldata ids) external onlyOwner {
+        for (uint256 i; i < ids.length; i++) {
+            if (!_exists(ids[i]) || _markets[ids[i]].status != Status.OPEN) revert MarketNotOpen(ids[i]);
+            _void(ids[i], VOID_ADMIN);
+        }
+    }
 
     function setForwarder(address forwarder_) external onlyOwner {}
 
@@ -161,5 +177,12 @@ contract LiveMarket is ILiveMarket, ReentrancyGuard, Pausable, Ownable {
 
     function _exists(uint256 id) private view returns (bool) {
         return id != 0 && id < nextMarketId;
+    }
+
+    function _void(uint256 id, uint8 reason) private {
+        Market storage m = _markets[id];
+        m.status = Status.VOIDED;
+        m.outcome = Outcome.VOID;
+        emit MarketVoided(id, reason);
     }
 }
