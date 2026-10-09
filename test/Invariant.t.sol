@@ -121,8 +121,34 @@ contract Handler is Test {
         // sesekali report yang harus di-skip: outcome tidak sah atau partai lain
         if (outcomeSeed % 16 == 0) outs[0] = uint8(Outcome.VOID) + 1;
         if (outcomeSeed % 16 == 1) key = bytes32(uint256(1));
+        Status before = market.getMarket(one[0]).status;
         fwd.forward(address(market), "", abi.encode(key, one, outs));
-        if (market.getMarket(one[0]).status == Status.RESOLVED) resolvedByForwarder[one[0]] = true;
+        if (before == Status.OPEN && market.getMarket(one[0]).status == Status.RESOLVED) {
+            resolvedByForwarder[one[0]] = true;
+        }
+    }
+
+    /// invarian 7: onReport dari selain forwarder (termasuk owner/resolver) wajib revert
+    /// UnauthorizedForwarder tanpa mengubah state, walaupun isi report sah.
+    function reportFromStranger(uint256 callerSeed, uint256 idSeed, uint256 outcomeSeed) external tracked {
+        address caller = callerSeed % 4 == 0 ? address(this) : address(uint160(bound(callerSeed, 1, type(uint160).max)));
+        if (caller == address(fwd)) caller = address(uint160(caller) + 1);
+        uint256[] memory one = new uint256[](1);
+        one[0] = _id(idSeed);
+        uint8[] memory outs = new uint8[](1);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        outs[0] = uint8(1 + outcomeSeed % 3);
+
+        bytes32 marketBefore = keccak256(abi.encode(market.getMarket(one[0])));
+        uint256 feesBefore = market.feesAccrued();
+        vm.prank(caller);
+        try market.onReport("", abi.encode(gameKey, one, outs)) {
+            fail("inv7: onReport dari selain forwarder diterima");
+        } catch (bytes memory err) {
+            assertEq(err, abi.encodeWithSelector(ILiveMarket.UnauthorizedForwarder.selector, caller), "inv7: revert lain");
+        }
+        assertEq(keccak256(abi.encode(market.getMarket(one[0]))), marketBefore, "inv7: state pasar berubah");
+        assertEq(market.feesAccrued(), feesBefore, "inv7: feesAccrued berubah");
     }
 
     function claim(uint256 actorSeed, uint256 idSeed) external tracked {
@@ -201,7 +227,7 @@ contract InvariantTest is Test {
         usdc.setMinter(address(handler), true);
         targetContract(address(handler));
         // hanya aksi; getter publik handler bukan target fuzz
-        bytes4[] memory actions = new bytes4[](11);
+        bytes4[] memory actions = new bytes4[](12);
         actions[0] = Handler.create.selector;
         actions[1] = Handler.bet.selector;
         actions[2] = Handler.lock.selector;
@@ -213,6 +239,7 @@ contract InvariantTest is Test {
         actions[8] = Handler.setFeeBps.selector;
         actions[9] = Handler.withdrawFees.selector;
         actions[10] = Handler.warp.selector;
+        actions[11] = Handler.reportFromStranger.selector;
         targetSelector(FuzzSelector(address(handler), actions));
     }
 
