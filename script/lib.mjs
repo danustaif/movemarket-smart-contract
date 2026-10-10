@@ -19,6 +19,7 @@ export const paths = {
   source: SOURCE,
   constants: CONSTANTS,
   deployment: path.join(ROOT, "deployments/monad-testnet.json"),
+  gatedDeployment: path.join(ROOT, "deployments/gated-forwarder.monad-testnet.json"),
   // config tiap target CRE di SOT cre.targets, di folder workflow cre.workflowName
   creConfigs: Object.entries(cre.targets).filter(([k]) => !k.startsWith("_")).map(([, t]) =>
     path.join(BACKEND, `cre/${cre.workflowName}/${t.config}`)),

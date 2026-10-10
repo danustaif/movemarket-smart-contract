@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Verifikasi MockUSDC dan LiveMarket di explorer Monad Testnet (SOT verification, CONTRACTS.md bagian 9).
 //
-//   node script/verify.mjs [--dry-run] [--sourcify] [--rpc <url>] [--deployment <file>]
+//   node script/verify.mjs [--dry-run] [--sourcify] [--gated] [--rpc <url>] [--deployment <file>]
+//
+// --gated: GatedForwarder (SOT D24) dari deployments/gated-forwarder.monad-testnet.json, constructor arg operator,
+// tx deploy dari broadcast/DeployGatedForwarder.s.sol/<chain>/run-latest.json.
 //
 // Jalur utama: POST SOT verification.apiUrl (MonadVision, Socialscan, Monadscan sekaligus).
 // Bentuk body dari monskills v0.7.2 skills/scaffold/SKILL.md bagian "Verification (All Explorers)":
@@ -21,22 +24,25 @@ import { artifact, assertChain, fail, paths, publicClient, readJson, viem, readD
 
 const { values: o } = parseArgs({
   options: {
-    "dry-run": { type: "boolean" }, sourcify: { type: "boolean" },
+    "dry-run": { type: "boolean" }, sourcify: { type: "boolean" }, gated: { type: "boolean" },
     rpc: { type: "string" }, deployment: { type: "string" },
   },
 });
 const sot = readJson(paths.constants);
 const { apiUrl: API, sourcifyUrl: SOURCIFY } = sot.verification;
-const d = readDeployment(o.deployment);
+const d = readDeployment(o.deployment ?? (o.gated ? paths.gatedDeployment : paths.deployment));
 const pub = publicClient(o.rpc ?? sot.network.rpcPublic);
 await assertChain(pub, sot);
 
-const contracts = [
-  { name: "MockUSDC", address: d.mockUsdc, args: [] },
-  { name: "LiveMarket", address: d.liveMarket, args: [d.mockUsdc, d.forwarder, d.resolver] },
-];
+const contracts = o.gated
+  ? [{ name: "GatedForwarder", address: d.gatedForwarder, args: [d.operator] }]
+  : [
+    { name: "MockUSDC", address: d.mockUsdc, args: [] },
+    { name: "LiveMarket", address: d.liveMarket, args: [d.mockUsdc, d.forwarder, d.resolver] },
+  ];
 
-const broadcastFile = path.join(paths.root, `broadcast/Deploy.s.sol/${d.chainId}/run-latest.json`);
+const script = o.gated ? "DeployGatedForwarder.s.sol" : "Deploy.s.sol";
+const broadcastFile = path.join(paths.root, `broadcast/${script}/${d.chainId}/run-latest.json`);
 const deployTxs = fs.existsSync(broadcastFile) ? readJson(broadcastFile).transactions : null;
 if (!deployTxs) console.warn(`PERINGATAN: ${path.relative(paths.root, broadcastFile)} tidak ada, pra-cek creation code dilewati.`);
 
@@ -94,7 +100,7 @@ for (const c of contracts) {
 }
 
 if (failed) fail(`${failed} kontrak gagal diverifikasi`);
-console.log(`\nSelesai. Cek ${sot.network.explorer}/address/${d.liveMarket} (tab Contract).`);
+console.log(`\nSelesai. Cek ${sot.network.explorer}/address/${contracts.at(-1).address} (tab Contract).`);
 
 async function checkCreationCode(c, expected) {
   const t = deployTxs.find((x) => x.transactionType === "CREATE" && x.contractAddress?.toLowerCase() === c.address.toLowerCase());
