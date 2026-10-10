@@ -162,3 +162,50 @@ pnpx envio@3.0.0-alpha.21 init contract-import explorer -b monad-testnet -c <LIV
 ```
 
 Start block indexer = `addresses.deployBlock`.
+
+## i. GatedForwarder untuk `CRE_MODE=mock` (SOT D24)
+
+MockKeystoneForwarder Chainlink `0xB9F79d...` permissionless: siapa pun bisa memanggil `report()` dan menetapkan hasil pasar. Selama resolver memakai `CRE_MODE=mock`, pasang `GatedForwarder` (`src/GatedForwarder.sol`) yang hanya menerima `report()` dari wallet resolver. ABI `report()` dan event `ReportProcessed` sama dengan mock Chainlink, jadi resolver cukup membaca alamat baru dari SOT.
+
+Biaya (102 gwei, Monad menagih gas limit): deploy sekitar 0,066 MON (limit forge sekitar 643.000 gas, terpakai 494.509 di anvil), `setForwarder` sekitar 0,004 MON (`gas.limits.setForwarder` 38.375). Deployer dan owner di atas 0,1 MON sudah cukup.
+
+```bash
+forge build && forge test
+export OPERATOR_ADDRESS=$(cast wallet address --account resolver)   # wallet RESOLVER_PRIVATE_KEY resolver service
+
+# 1. simulasi tanpa transaksi
+forge script script/DeployGatedForwarder.s.sol --rpc-url https://testnet-rpc.monad.xyz --account deployer
+
+# 2. MENGIRIM TRANSAKSI (1 transaksi: deploy GatedForwarder)
+forge script script/DeployGatedForwarder.s.sol --rpc-url https://testnet-rpc.monad.xyz --account deployer --broadcast --slow
+
+# 3. sinkron ke SOT: validasi kode dan operator() on-chain, tulis addresses.creGatedForwarder, jalankan sot/check.mjs
+node script/sync-sot.mjs --gated --dry-run
+node script/sync-sot.mjs --gated
+
+# 4. verifikasi explorer (bukan transaksi chain), constructor arg operator
+node script/verify.mjs --gated --dry-run
+node script/verify.mjs --gated
+
+# 5. MENGIRIM TRANSAKSI: owner LiveMarket memindahkan forwarder ke GatedForwarder
+cast send <LIVE_MARKET> "setForwarder(address)" <GATED_FORWARDER> \
+  --gas-limit 38375 --rpc-url https://testnet-rpc.monad.xyz --account deployer
+cast call <LIVE_MARKET> "forwarder()(address)" --rpc-url https://testnet-rpc.monad.xyz   # cek
+```
+
+`<LIVE_MARKET>` = `addresses.liveMarket`, `<GATED_FORWARDER>` = `addresses.creGatedForwarder` di `../source/sot/constants.json` (`sync-sot.mjs --gated` mencetak perintah langkah 5 dengan alamat terisi). `--account` = keystore owner `LiveMarket` (deployer).
+
+Hasil: `deployments/gated-forwarder.monad-testnet.json` (commit file ini, awalan `contracts:`) dan perubahan SOT (commit `sot:` di `source/`). Lalu deploy ulang resolver: tanpa env baru, forwarder diambil dari SOT. Saat start ia membaca `LiveMarket.forwarder()`; kalau beda dengan GatedForwarder ia mencatat `cre_forwarder_mismatch` dan tidak mengirim report. Sama seperti `Deploy.s.sol`, `anvil --chain-id 10143` dengan `--broadcast` menulis path yang sama; `sync-sot.mjs --gated` menolak file sisa anvil karena kodenya tidak ada di Monad Testnet.
+
+Kembali ke forwarder Chainlink (MENGIRIM TRANSAKSI, gas sama):
+
+```bash
+# demo cre workflow simulate --broadcast: MockKeystoneForwarder (kembali permissionless selama terpasang)
+cast send <LIVE_MARKET> "setForwarder(address)" 0xB9F79d863261869B234c481D1f9A7af84AeAd192 \
+  --gas-limit 38375 --rpc-url https://testnet-rpc.monad.xyz --account deployer
+# DON (setelah Early Access, bersamaan dengan CRE_MODE=don): KeystoneForwarder, buka ulang Forwarder Directory dulu
+cast send <LIVE_MARKET> "setForwarder(address)" 0xF8344CFd5c43616a4366C34E3EEE75af79a74482 \
+  --gas-limit 38375 --rpc-url https://testnet-rpc.monad.xyz --account deployer
+```
+
+Selama forwarder bukan GatedForwarder, resolver `CRE_MODE=mock` berhenti mengirim report (`cre_forwarder_mismatch`). Setelah demo `simulate --broadcast`, kembalikan dengan perintah langkah 5.

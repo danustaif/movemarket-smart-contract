@@ -21,14 +21,16 @@ Alamat kanonik dan blok deploy ada di `source/sot/constants.json`; file deploy d
 |---|---|
 | `src/LiveMarket.sol` | `ILiveMarket` + OpenZeppelin `ReentrancyGuard`, `Pausable`, `Ownable`. Implementasi `IReceiver` sendiri (tanpa `ReceiverTemplate`) |
 | `src/MockUSDC.sol` | tUSDC 6 desimal, `setMinter` (owner), `mint` (minter) |
+| `src/GatedForwarder.sol` | Forwarder `CRE_MODE=mock` (SOT D24): ABI MockKeystoneForwarder, `report()` hanya dari `operator` (wallet resolver). Belum di-deploy, langkah di `DEPLOY.md` bagian i |
 | `src/interfaces/ILiveMarket.sol` | Struct, event, error, fungsi, invarian di NatSpec |
 | `src/interfaces/LiveMarketTypes.sol` | Enum dan konstanta (`MAX_*`, `VOID_*`, `SKIP_*`) |
 | `src/interfaces/IMockUSDC.sol` | Fungsi tambahan tUSDC di atas ERC20 |
 | `src/interfaces/IReceiver.sol`, `IERC165.sol` | Disalin dari dokumentasi CRE, jangan diubah |
 | `script/Deploy.s.sol` | Deploy MockUSDC + LiveMarket, set resolver sebagai minter, tulis `deployments/monad-testnet.json` |
+| `script/DeployGatedForwarder.s.sol` | Deploy GatedForwarder (`OPERATOR_ADDRESS`), tulis `deployments/gated-forwarder.monad-testnet.json` |
 | `script/check-abi.mjs` | Selector dan topic0 `ILiveMarket` dan `LiveMarket` harus sama dengan `sot/abi.json` |
-| `script/sync-sot.mjs` | Pasca-deploy: validasi `deployments/monad-testnet.json`, tulis alamat ke `sot/constants.json` dan config CRE (padanan `sync:contracts`) |
-| `script/verify.mjs` | Verifikasi MockUSDC dan LiveMarket (API `agents.devnads.com`, cadangan Sourcify) |
+| `script/sync-sot.mjs` | Pasca-deploy: validasi `deployments/monad-testnet.json`, tulis alamat ke `sot/constants.json` dan config CRE (padanan `sync:contracts`); `--gated` hanya `addresses.creGatedForwarder` |
+| `script/verify.mjs` | Verifikasi MockUSDC dan LiveMarket, atau GatedForwarder dengan `--gated` (API `agents.devnads.com`, cadangan Sourcify) |
 | `script/measure-gas.mjs` | Ukur `gas.limits` SOT dengan `eth_estimateGas` + 10% lewat skenario transaksi nyata |
 | `test/` | Test per fungsi sesuai `CONTRACTS.md` bagian 7, invariant, dan test script deploy. `test/mocks/MockForwarder.sol` meneruskan `onReport` |
 
